@@ -1,0 +1,253 @@
+---
+title: "Bigdata2-report2"
+author: "Jieling Ren"
+date: "2/11/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+library(tidyverse)
+library(forecast)
+library(leaps)
+library(car)
+library(ggplot2)
+library(GGally)
+
+cancer.df <- read.csv("/Users/xinwen/Brandeis/2022spring/big data 2/report2/Aces-Cancer/cancer_reg-cleaning.csv")
+cancer.t <- as_tibble(cancer.df)
+
+```{r summary}
+summary(cancer.df$TARGET_deathRate)
+sd(cancer.df$TARGET_deathRate)
+tmp<-table(cancer.df$TARGET_deathRate)
+index<-which.max(tmp)
+tmp[index]
+
+summary(cancer.df$incidenceRate)
+sd(cancer.df$incidenceRate)
+tmp2<-table(cancer.df$incidenceRate)
+index2<-which.max(tmp2)
+tmp2[index2]
+
+summary(cancer.df$medIncome)
+sd(cancer.df$medIncome)
+tmp3<-table(cancer.df$medIncome)
+index3<-which.max(tmp3)
+tmp3[index3]
+
+summary(cancer.df$PctPrivateCoverage)
+sd(cancer.df$PctPrivateCoverage)
+tmp4<-table(cancer.df$PctPrivateCoverage)
+index4<-which.max(tmp4)
+tmp4[index4]
+
+summary(cancer.df$PctPublicCoverageAlone)
+sd(cancer.df$PctPublicCoverageAlone)
+tmp6<-table(cancer.df$PctPublicCoverageAlone)
+index6<-which.max(tmp6)
+tmp6[index6]
+
+summary(cancer.df$povertyPercent)
+sd(cancer.df$povertyPercent)
+tmp5<-table(cancer.df$povertyPercent)
+index5<-which.max(tmp5)
+tmp5[index5]
+```
+
+```{r select variables for regression-all data}
+cancer.lm0 <- lm(TARGET_deathRate ~ incidenceRate+medIncome+PctPrivateCoverage, data = cancer.t)  
+summary(cancer.lm0)
+pairs(~ TARGET_deathRate + incidenceRate + medIncome + PctPrivateCoverage,
+      data=cancer.t, main="Scatterplot Matrix")
+vif(cancer.lm0)
+
+cancer.lm01 <- lm(PctPrivateCoverage ~ povertyPercent, data = cancer.t)  
+summary(cancer.lm01)
+
+cancer.lm02 <- lm(PctPublicCoverageAlone ~ povertyPercent, data = cancer.t)  
+summary(cancer.lm02)
+
+## additional diagnostics to check for outliers/leverage points
+ggplot(cancer.t, aes(y=TARGET_deathRate, x= incidenceRate))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(cancer.t, aes(y=TARGET_deathRate, x= medIncome))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(cancer.t, aes(y=TARGET_deathRate, x= PctPrivateCoverage))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(cancer.t, aes(y=PctPrivateCoverage, x= povertyPercent))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(cancer.t, aes(y=PctPublicCoverageAlone, x= povertyPercent))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+```
+
+
+```{r select variables for regression}
+# select variables for regression
+selected.var <- c(3,4,5,24)   
+
+# partition data
+set.seed(1)  # set seed for reproducing the partition
+train.index <- sample(c(1:3048), 2000)  
+
+#Create and set aside the remaining 40% of the data, to be used after omitting unhelpful data points and unnecessary variables.
+train.t <- cancer.t[ train.index, selected.var ]
+valid.t <- cancer.t[ -train.index, selected.var ]
+
+#### Exclude outliers - It is an iterative process! #####
+train.t <- train.t[-c(589,704,284,118,819,150,653,663,277,233),]
+
+# and exclude them from the valid.t subset
+valid.t <- cancer.t[-train.index, selected.var]
+
+# use lm() to run a linear regression of Price on all 11 predictors in the training set. 
+# use . after ~ to include all the remaining columns in train.df as predictors.
+cancer.lm <- lm(TARGET_deathRate ~ . , data = train.t)  
+#car.lm <- lm(Price ~ . -Met_Color -Automatic -CC -Doors -Fuel_Type -Quarterly_Tax, data = train.t)
+
+#  use options() to ensure numbers are not displayed in scientific notation.
+summary(cancer.lm)
+
+#check for Variance Inflation Factor (VIF); must be < 10; should be less than 5
+vif(cancer.lm)
+
+## additional diagnostics to check for outliers/leverage points
+ggplot(train.t, aes(y=TARGET_deathRate, x= incidenceRate))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(train.t, aes(y=TARGET_deathRate, x= medIncome))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+ggplot(train.t, aes(y=TARGET_deathRate, x= PctPrivateCoverage))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+par(mfrow=c(2,2))
+plot(cancer.lm)
+```
+
+
+```{r prediction}
+# use predict() to make predictions on a new set. 
+cancer.lm.pred <- predict(cancer.lm, valid.t)
+options(scipen=3047, digits = 3)
+some.residuals <- valid.t$TARGET_deathRate[1:20] - cancer.lm.pred[1:20]
+data.frame("Predicted" = cancer.lm.pred[1:20], "Actual" = valid.t$TARGET_deathRate[1:20],
+           "Residual" = some.residuals)
+
+# use accuracy() to compute common accuracy measures.
+accuracy(cancer.lm.pred, valid.t$TARGET_deathRate)
+
+#### Figure 6.1
+all.residuals <- valid.t$TARGET_deathRate - cancer.lm.pred
+length(all.residuals[which(all.residuals > -3048 & all.residuals < 3048)])/400
+hist(all.residuals, breaks = 25, xlab = "Residuals", main = "")
+```
+
+```{r search}
+# use regsubsets() in package leaps to run an exhaustive search. 
+# unlike with lm, categorical predictors must be turned into dummies manually.
+search.train <- regsubsets(TARGET_deathRate ~ . , data = train.t, nbest = 1, nvmax = dim(train.t)[2],
+                           method = "exhaustive")
+sum <- summary(search.train)
+sum$which
+sum$rsq
+
+search.valid <- regsubsets(TARGET_deathRate ~ . , data = valid.t, nbest = 1, nvmax = dim(valid.t)[2],
+                           method = "exhaustive")
+sum <- summary(search.valid)
+sum$rsq
+
+# show models
+sum$which
+
+# show metrics
+sum$rsq
+sum$adjr2
+
+
+# use step() to run backwards regression.
+cancer.lm.step <- step(cancer.lm, direction = "backward")
+summary(cancer.lm.step)  
+cancer.lm.step.pred <- predict(cancer.lm.step, valid.t)
+accuracy(cancer.lm.step.pred, valid.t$TARGET_deathRate)
+
+# create model with no predictors
+cancer.lm.null <- lm(TARGET_deathRate~1, data = train.t)
+# use step() to run forward regression.
+cancer.lm.step <- step(cancer.lm.null, scope=list(lower=cancer.lm.null, upper=cancer.lm), direction = "forward")
+summary(cancer.lm.step)  
+cancer.lm.step.pred <- predict(cancer.lm.step, valid.t)
+accuracy(cancer.lm.step.pred, valid.t$TARGET_deathRate)
+vif(cancer.lm.step)
+
+# use step() to run stepwise regression
+cancer.lm.step <- step(cancer.lm, direction = "both")
+summary(cancer.lm.step)
+cancer.lm.step.pred <- predict(cancer.lm.step, valid.t)
+accuracy(cancer.lm.step.pred, valid.t$TARGET_deathRate)
+```
+
+
+```{r interaction variables}
+# select variables for regression
+selected.var2 <- c(3,4,5,24)   
+
+# partition data
+set.seed(1)  # set seed for reproducing the partition
+train.index <- sample(c(1:3048), 2000)  
+
+#Create and set aside the remaining 40% of the data, to be used after omitting unhelpful data points and unnecessary variables.
+train.t2 <- cancer.t[ train.index, selected.var2 ]
+valid.t2 <- cancer.t[ -train.index, selected.var2 ]
+
+#### Exclude outliers - It is an iterative process! #####
+train.t2 <- train.t2[-c(589,704,284,118,819,150,653,663,277,233),]
+
+# and exclude them from the valid.t subset
+valid.t2 <- cancer.t[ -train.index, selected.var2 ]
+
+# big matrix plot; make sure the plot window is big enough; then remove unneeded variables; repeat
+#pairs(~ Price + Age_08_04 + KM + HP,
+      #data=train.t, main="Scatterplot Matrix")
+
+# use lm() to run a linear regression of Price on all 11 predictors in the training set. 
+# use . after ~ to include all the remaining columns in train.df as predictors.
+cancer.lm2 <- lm(TARGET_deathRate ~ incidenceRate+medIncome*PctPrivateCoverage, data = train.t2)  
+#car.lm <- lm(Price ~ . -Met_Color -Automatic -CC -Doors -Fuel_Type -Quarterly_Tax, data = train.t)
+
+#  use options() to ensure numbers are not displayed in scientific notation.
+summary(cancer.lm2)
+
+#check for Variance Inflation Factor (VIF); must be < 10; should be less than 5
+vif(cancer.lm2)
+
+## additional diagnostics to check for outliers/leverage points
+ggplot(train.t2, aes(y=TARGET_deathRate, x= incidenceRate))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+
+ggplot(train.t2, aes(y=TARGET_deathRate, x= PctPrivateCoverage))+
+  geom_point(alpha = 0.6)+
+  geom_smooth(method=lm)
+
+plot(cancer.lm2)
+```
+
+
+```{r prediction2}
+cancer.lm.pred2 <- predict(cancer.lm2, valid.t2)
+accuracy(cancer.lm.pred2, valid.t2$TARGET_deathRate)
+```
