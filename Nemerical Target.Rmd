@@ -1,0 +1,62 @@
+---
+title: "Untitled"
+author: "Jieling Ren"
+date: "3/16/2022"
+output: html_document
+---
+library(tidyverse)
+library(forecast)
+library(leaps)
+library(car)
+library(ggplot2)
+library(GGally)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r adding new variable}
+cancer.d <- read.csv("cancer_reg-adding.csv")
+cancer.t <- as_tibble(cancer.d)
+
+selected.var2 <- c(3,4,5,24,35,36)   
+
+set.seed(1)  # set seed for reproducing the partition
+train.index <- sample(c(1:3048), 2000)  
+
+train.t3 <- cancer.t[ train.index, selected.var2 ]
+valid.t3 <- cancer.t[ -train.index, selected.var2 ]
+
+train.t3 <- train.t3[-c(1573,461,1528,478,290,1216,1004,1066,709,1212,1002,984,1063,708,1207,999,448,1204,997,447,1057,706,1199,994,446,704,1053,1194,991,445,1049,702,1189,988,444,1045,700,1184,985,443,1041,698,1179,982,442,1037,696,1174,979,441,1033,694),]
+
+valid.t3 <- cancer.t[ -train.index, selected.var2 ]
+
+cancer.lm2 <- lm(TARGET_deathRate ~ incidenceRate+medIncome*PctPrivateCoverage+clustering_6, data = train.t3) 
+summary(cancer.lm2)
+vif(cancer.lm2)
+plot(cancer.lm2)
+
+cancer.lm3 <- lm(TARGET_deathRate ~ incidenceRate+medIncome*PctPrivateCoverage+clustering_6, data = valid.t3)
+summary(cancer.lm3)
+```
+
+
+```{r predict}
+cancer.lm.pred2 <- predict(cancer.lm2, valid.t3)
+options(scipen=3047, digits = 3)
+some.residuals <- valid.t3$TARGET_deathRate[1:20] - cancer.lm.pred2[1:20]
+data.frame("Predicted" = cancer.lm.pred2[1:20], "Actual" = valid.t3$TARGET_deathRate[1:20],
+           "Residual" = some.residuals)
+
+accuracy(cancer.lm.pred2, valid.t3$TARGET_deathRate)
+
+all.residuals <- valid.t3$TARGET_deathRate - cancer.lm.pred2
+length(all.residuals[which(all.residuals > -3048 & all.residuals < 3048)])/400
+hist(all.residuals, breaks = 25, xlab = "Residuals", main = "")
+```
+```{r visualization}
+boxplot(TARGET_deathRate ~ clustering_6, cancer.t)
+boxplot(TARGET_deathRate ~ clustering.km, cancer.t)
+```
+
+

@@ -1,0 +1,205 @@
+---
+title: "Clustering"
+author: "Jieling Ren"
+date: "3/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r beginning}
+cancer.df <- read.csv("cancer_reg-cleaning.csv")
+
+cancer.df<-cancer.df[,c(-9)]
+row.names(cancer.df) <- cancer.df[,12]
+cancer.df <- cancer.df[,-12]
+d <- dist(cancer.df, method = "euclidean")
+cancer.df.norm <- sapply(cancer.df, scale)
+row.names(cancer.df.norm) <- row.names(cancer.df) # compute normalized distance based on variables Sales and 
+d.norm <- dist(cancer.df.norm, method = "euclidean") 
+```
+
+
+
+```{r hclust()}
+hc1 <- hclust(d.norm, method = "single")
+plot(hc1, hang = -1, ann = FALSE) 
+
+hc2 <- hclust(d.norm, method = "average")
+plot(hc2, hang = -1, ann = FALSE)
+
+hc3 <- hclust(d.norm, method = "median")
+plot(hc3, hang = -1, ann = FALSE)
+
+hc4 <- hclust(d.norm, method = "complete")
+plot(hc4, hang = -1, ann = FALSE)
+
+hc5 <- hclust(d.norm, method = "centroid")
+plot(hc5, hang = -1, ann = FALSE)
+
+hc6 <- hclust(d.norm, method = "ward.D")
+plot(hc6, hang = -1, ann = FALSE)
+```
+
+
+
+```{r histogram}
+memb1 <- cutree(hc1, k = 13) #single
+memb1
+
+memb2 <- cutree(hc2, k = 13) #average
+memb2
+
+memb3 <- cutree(hc3, k = 13) #median
+memb3
+
+memb4 <- cutree(hc4, k = 13) #complete
+memb4
+
+memb5 <- cutree(hc5, k = 13) #centroid
+memb5
+
+# ward.D
+memb6 <- cutree(hc6, k = 13) #ward.D
+memb6
+
+cat(memb1)
+cat(memb2)
+cat(memb3)
+cat(memb4)
+cat(memb5)
+cat(memb6)
+
+hist(memb1)
+hist(memb2)
+hist(memb3)
+hist(memb4)
+hist(memb5)
+hist(memb6)
+#best:memb6
+```
+
+```{r k best}
+library(purrr)
+library(ggplot2)
+set.seed(2)
+cancer.df2 <- read.csv("cancer_reg-cleaning.csv")
+cancer.df2<-cancer.df2[,c(-9)]
+str(cancer.df2)
+cancer.df2 <- cancer.df2[,-12]
+d <- dist(cancer.df2, method = "euclidean")
+cancer.df2.norm <- sapply(cancer.df2, scale)
+model = kmeans(cancer.df2.norm, centers = 2)
+head(model)
+tot.withinss <- map_dbl(1:20,  function(k){
+  model <- kmeans(cancer.df2.norm, centers = k)
+  model$tot.withinss
+})
+
+head(
+  elbow_df_l <- data.frame(
+    k=1:20,
+    tot.withinss = tot.withinss
+  ), 20)
+
+elbow_df_l %>%
+  ggplot(aes(x=k, y=tot.withinss)) +
+  geom_line() +
+  scale_x_continuous(breaks = 1:20)
+```
+
+```{r heatmap}
+row.names(cancer.df.norm) <- paste(memb6, ": ", row.names(cancer.df), sep = "")
+row.names(cancer.df.norm)
+heatmap(as.matrix(cancer.df.norm), Colv = NA, hclustfun = hclust, 
+        col=rev(paste("grey",1:99,sep="")))
+```
+
+
+
+```{r k-mean}
+cancer.df <- read.csv("cancer_reg-cleaning.csv")
+cancer.df<-cancer.df[,c(-9)]
+str(cancer.df)
+row.names(cancer.df) <- cancer.df[,12]
+cancer.df <- cancer.df[,-12]
+cancer.df.norm <- sapply(cancer.df, scale)
+row.names(cancer.df.norm) <- row.names(cancer.df) 
+
+set.seed(2)
+km <- kmeans(cancer.df.norm, 13)  
+km$cluster
+cat(km$cluster)
+km$centers
+hist(km$cluster)
+```
+
+
+```{r scatterplot}
+plot(c(0), xaxt = 'n', ylab = "", type = "l", 
+     ylim = c(min(km$centers), max(km$centers)), xlim = c(0, 15))
+
+axis(1, at = c(1:32), labels = names(cancer.df))
+
+for (i in c(1:13))
+  lines(km$centers[i,], lty = i, lwd = 2, col = ifelse(i %in% c(1, 3, 5),
+                                                       "black", "dark grey"))     
+
+for (i in c(1:13))
+  lines(km$centers[i,], lty = i, lwd = 2, col = switch(i, "black", "red", 
+                                                       "green", "purple"))
+
+text(x = 0.5, y = km$centers[, 1], labels = paste("Cluster", c(1:5)))
+
+dist(km$centers)
+```
+
+
+```{r kmeans}
+library(dclust)
+hybrid <- dclust(d.norm, method = "kmeans", stand = TRUE)
+plot(hybrid, ann = FALSE)
+```
+
+```{r test}
+cancer.df3 <- read.csv("cancer_reg_test.csv")
+row.names(cancer.df3) <- cancer.df3[,1]
+cancer.df3 <- cancer.df3[,-1]
+d <- dist(cancer.df3, method = "euclidean")
+cancer.df3.norm <- sapply(cancer.df3, scale)
+row.names(cancer.df3.norm) <- row.names(cancer.df3) 
+d3.norm <- dist(cancer.df3.norm, method = "euclidean") 
+hc1 <- hclust(d3.norm, method = "single")
+
+hc2 <- hclust(d3.norm, method = "average")
+
+hc3 <- hclust(d3.norm, method = "median")
+
+hc4 <- hclust(d3.norm, method = "complete")
+
+hc5 <- hclust(d3.norm, method = "centroid")
+
+hc6 <- hclust(d3.norm, method = "ward.D")
+
+memb1 <- cutree(hc1, k = 13) #single
+
+memb2 <- cutree(hc2, k = 13) #average
+
+memb3 <- cutree(hc3, k = 13) #median
+
+memb4 <- cutree(hc4, k = 13) #complete
+
+memb5 <- cutree(hc5, k = 13) #centroid
+
+memb6 <- cutree(hc6, k = 13) #ward.D
+
+row.names(cancer.df3.norm) <- paste(memb6, ": ", row.names(cancer.df3), sep = "")
+row.names(cancer.df3.norm)
+
+heatmap(as.matrix(cancer.df3.norm), Colv = NA, hclustfun = hclust, 
+        col=rev(paste("grey",1:99,sep="")))
+```
